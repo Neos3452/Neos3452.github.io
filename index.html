@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width">
+
+    <title>Script processor node example</title>
+
+    <link rel="stylesheet" href="">
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+
+  <body>
+    <body onLoad="init()">
+    <canvas width="200" height="200">
+         No canvas support :(
+    </canvas>
+    </body>
+    <script>
+    navigator.getUserMedia = navigator.getUserMedia ||
+                         navigator.webkitGetUserMedia ||
+                         navigator.mozGetUserMedia;
+    var mode = window.location.search.substring(1) || 'fft'; // 'avg', 'fft'
+    function init() {
+    navigator.getUserMedia({audio: true}, function(audioStream) {
+        var canvas = document.querySelector('canvas');
+        var canvasCtx = canvas.getContext("2d");
+        var audioCtx = new AudioContext();
+        var source = audioCtx.createMediaStreamSource(audioStream);
+
+        if (mode == 'avg') {
+            var scriptNode = audioCtx.createScriptProcessor(256, 1, 1);
+            scriptNode.onaudioprocess = function(audioProcessingEvent) {
+                var inputBuffer = audioProcessingEvent.inputBuffer;
+                audioProcessingEvent.outputBuffer = inputBuffer;
+                var inputData = inputBuffer.getChannelData(0);
+                var pos = 0;
+                var posCount = 0;
+                var neg = 0;
+                var negCount = 0;
+                for (var sample = 0; sample < inputBuffer.length; sample++) {
+                    if (inputData[sample] < 0) {
+                        neg += inputData[sample];
+                        ++negCount;
+                    } else {
+                        pos += inputData[sample];
+                        ++posCount;
+                    }
+                }
+                pos /= posCount;
+                pos *= 256;
+                neg /= negCount;
+                neg *= -256;
+                
+                canvasCtx.fillStyle = 'rgb(' + Math.round(pos) + ', 0, ' + Math.round(neg) + ')';
+                canvasCtx.fillRect(0, 0, 200, 200);
+
+            // Loop through the output channels (in this case there is only one)
+    //        for (var channel = 0; channel < outputBuffer.numberOfChannels; channel++) {
+                  // Loop through the 4096 samples
+    //              for (var sample = 0; sample < inputBuffer.length; sample++) {
+                    // make output equal to the same as the input
+    //                outputData[sample] = inputData[sample];
+                    // add noise to each output sample
+    //                outputData[sample] += ((Math.random() * 2) - 1) * 0.2;         
+    //              }
+    //            }
+                }
+            source.connect(scriptNode);
+            scriptNode.connect(audioCtx.destination);
+        } else if (mode == 'fft') {
+            var analyser = audioCtx.createAnalyser();
+            source.connect(analyser);
+            analyser.fftSize = 2048;
+            var dataArray = new Uint8Array(analyser.frequencyBinCount);
+            (function draw() {
+                drawVisual = requestAnimationFrame(draw);
+                analyser.getByteFrequencyData(dataArray);
+
+                var max = 0;
+                var freq = 0;
+                for (var i = 0; i < dataArray.length; ++i) {
+                    if (max < dataArray[i]) {
+                        max = dataArray[i];
+                        freq = i;
+                    }
+                }
+                var angle = Math.round(320 * (Math.min(freq, 256) / 256));
+                var lightness = 10 + Math.round(60 * (max / 255));
+
+                canvasCtx.fillStyle = 'hsl(' + angle + ', 100%, ' + lightness + '%)';
+                canvasCtx.fillRect(0, 0, 200, 200);
+            })();
+        } else {
+            document.body.innerHTML = 'No mode: ' + mode;
+        }
+    }, function() {document.body.innerHTML = 'Error getting audio';});}
+    </script>
+  </body>
+</html>
